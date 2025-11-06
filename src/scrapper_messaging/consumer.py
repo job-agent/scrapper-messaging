@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import pika
 from job_scrapper_contracts import (
@@ -12,6 +12,7 @@ from job_scrapper_contracts import (
     ScrapeJobsResponse,
     ScrapperServiceInterface,
 )
+from pika.channel import Channel
 
 from .connection import RabbitMQConnection
 
@@ -20,6 +21,7 @@ class ScrapperConsumer:
     """RabbitMQ consumer that processes scrape job requests."""
 
     QUEUE_NAME = "job.scrape.request"
+    DEFAULT_BATCH_SIZE = 50
 
     def __init__(
         self,
@@ -47,7 +49,7 @@ class ScrapperConsumer:
 
     def _on_message(
         self,
-        channel: pika.channel.Channel,
+        channel: Channel,
         method: pika.spec.Basic.Deliver,
         properties: pika.spec.BasicProperties,
         body: bytes,
@@ -71,9 +73,11 @@ class ScrapperConsumer:
                 f"timeout={request.get('timeout', 30)}"
             )
 
-            response = self._process_request(request, channel, reply_to, correlation_id)
+            response, final_emitted = self._process_request(
+                request, channel, reply_to, correlation_id
+            )
 
-            if reply_to:
+            if reply_to and not final_emitted:
                 self._send_response(channel, reply_to, correlation_id, response)
 
             channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -97,39 +101,48 @@ class ScrapperConsumer:
     def _process_request(
         self,
         request: ScrapeJobsRequest,
-        channel: pika.channel.Channel,
+        channel: Channel,
         reply_to: Optional[str],
         correlation_id: Optional[str],
-    ) -> ScrapeJobsResponse:
+    ) -> Tuple[ScrapeJobsResponse, bool]:
         posted_after = None
         if request.get("posted_after"):
             posted_after = datetime.fromisoformat(request["posted_after"])
 
+        batch_size = request.get("batch_size", self.DEFAULT_BATCH_SIZE)
         total_jobs = 0
+        final_emitted = False
 
-        def on_page_complete(page_number: int, page_jobs: List[Job]):
-            nonlocal total_jobs
-            jobs_dicts = [job.to_dict() for job in page_jobs]
+        def emit_jobs(batch: List[Job], final: bool) -> None:
+            nonlocal total_jobs, final_emitted
+            jobs_dicts = [job.to_dict() for job in batch]
             total_jobs += len(jobs_dicts)
-
-            page_response: ScrapeJobsResponse = {
+            if final:
+                final_emitted = True
+            if not reply_to:
+                return
+            response: ScrapeJobsResponse = {
                 "jobs": jobs_dicts,
                 "success": True,
                 "error": None,
                 "jobs_count": len(jobs_dicts),
-                "is_complete": False,
-                "page_number": page_number,
+                "is_complete": final,
             }
-            if reply_to:
-                self._send_response(channel, reply_to, correlation_id, page_response)
+            if final:
+                response["total_jobs"] = total_jobs
+            self._send_response(channel, reply_to, correlation_id, response)
 
-        self.service.scrape_jobs_as_dicts(
+        result = self.service.scrape_jobs(
             salary=request.get("salary", 4000),
             employment=request.get("employment", "remote"),
             posted_after=posted_after,
             timeout=request.get("timeout", 30),
-            on_page_complete=on_page_complete,
+            batch_size=batch_size,
+            on_jobs_batch=emit_jobs,
         )
+
+        if isinstance(result, list):
+            total_jobs = max(total_jobs, len(result))
 
         self.logger.info(f"Scraping completed: total {total_jobs} jobs scraped")
 
@@ -142,11 +155,11 @@ class ScrapperConsumer:
             "total_jobs": total_jobs,
         }
 
-        return response
+        return response, final_emitted
 
     def _send_response(
         self,
-        channel: pika.channel.Channel,
+        channel: Channel,
         reply_to: str,
         correlation_id: Optional[str],
         response: ScrapeJobsResponse,

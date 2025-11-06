@@ -21,7 +21,9 @@ class DummyJob:
 def mock_service():
     service = Mock()
 
-    def fake_scrape_jobs_as_dicts(*, salary, employment, posted_after, timeout, on_page_complete):
+    def fake_scrape_jobs(
+        *, salary, employment, posted_after, timeout, batch_size, on_jobs_batch
+    ):
         job_data = {
             "job_id": 12345,
             "title": "Python Developer",
@@ -34,12 +36,15 @@ def mock_service():
             "employment_type": "remote",
         }
 
-        if on_page_complete:
-            on_page_complete(1, [DummyJob(**job_data)])
+        jobs = [DummyJob(**job_data)]
 
-        return [job_data]
+        if on_jobs_batch:
+            on_jobs_batch(jobs, False)
+            on_jobs_batch([], True)
 
-    service.scrape_jobs_as_dicts.side_effect = fake_scrape_jobs_as_dicts
+        return jobs
+
+    service.scrape_jobs.side_effect = fake_scrape_jobs
     return service
 
 
@@ -67,17 +72,26 @@ def test_process_request_basic(consumer, mock_service):
     channel = Mock()
     consumer._send_response = Mock()
 
-    response = consumer._process_request(
+    response, final_emitted = consumer._process_request(
         request, channel, "test.reply.queue", "test-correlation-id"
     )
 
-    mock_service.scrape_jobs_as_dicts.assert_called_once()
-    consumer._send_response.assert_called_once()
+    mock_service.scrape_jobs.assert_called_once()
+    assert consumer._send_response.call_count == 2
+    batch_response = consumer._send_response.call_args_list[0].args[3]
+    final_response = consumer._send_response.call_args_list[1].args[3]
 
+    assert batch_response["is_complete"] is False
+    assert batch_response["jobs_count"] == 1
+    assert final_response["is_complete"] is True
+    assert final_response["jobs_count"] == 0
+
+    assert final_emitted is True
     assert response["success"] is True
     assert response["error"] is None
     assert response["jobs_count"] == 0
     assert response["is_complete"] is True
+    assert response["total_jobs"] == 1
 
 
 def test_process_request_with_posted_after(consumer, mock_service):
@@ -93,8 +107,9 @@ def test_process_request_with_posted_after(consumer, mock_service):
 
     consumer._process_request(request, channel, "reply", "cid")
 
-    kwargs = mock_service.scrape_jobs_as_dicts.call_args.kwargs
+    kwargs = mock_service.scrape_jobs.call_args.kwargs
     assert kwargs["posted_after"] == datetime(2024, 1, 1, 0, 0, 0)
+    assert kwargs["batch_size"] == consumer.DEFAULT_BATCH_SIZE
 
 
 def test_process_request_default_values(consumer, mock_service):
@@ -105,11 +120,12 @@ def test_process_request_default_values(consumer, mock_service):
 
     consumer._process_request(request, channel, "reply", "cid")
 
-    kwargs = mock_service.scrape_jobs_as_dicts.call_args.kwargs
+    kwargs = mock_service.scrape_jobs.call_args.kwargs
     assert kwargs["salary"] == 4000
     assert kwargs["employment"] == "remote"
     assert kwargs["posted_after"] is None
     assert kwargs["timeout"] == 30
+    assert kwargs["batch_size"] == consumer.DEFAULT_BATCH_SIZE
 
 
 def test_send_response(consumer):

@@ -22,7 +22,7 @@ def mock_service():
     service = Mock()
 
     def fake_scrape_jobs(
-        *, salary, employment, posted_after, timeout, batch_size, on_jobs_batch
+        *, min_salary, employment_location, posted_after, timeout, batch_size, on_jobs_batch
     ):
         job_data = {
             "job_id": 12345,
@@ -62,12 +62,7 @@ def test_consumer_initialization(consumer, mock_service):
 
 
 def test_process_request_basic(consumer, mock_service):
-    request = {
-        "salary": 5000,
-        "employment": "full-time",
-        "posted_after": None,
-        "timeout": 30,
-    }
+    request = {"filter": {"min_salary": 5000, "employment_location": "full-time"}, "timeout": 30}
 
     channel = Mock()
     consumer._send_response = Mock()
@@ -96,9 +91,11 @@ def test_process_request_basic(consumer, mock_service):
 
 def test_process_request_with_posted_after(consumer, mock_service):
     request = {
-        "salary": 4000,
-        "employment": "remote",
-        "posted_after": "2024-01-01T00:00:00",
+        "filter": {
+            "min_salary": 4000,
+            "employment_location": "remote",
+            "posted_after": "2024-01-01T00:00:00",
+        },
         "timeout": 60,
     }
 
@@ -121,8 +118,8 @@ def test_process_request_default_values(consumer, mock_service):
     consumer._process_request(request, channel, "reply", "cid")
 
     kwargs = mock_service.scrape_jobs.call_args.kwargs
-    assert kwargs["salary"] == 4000
-    assert kwargs["employment"] == "remote"
+    assert kwargs["min_salary"] == 4000
+    assert kwargs["employment_location"] == "remote"
     assert kwargs["posted_after"] is None
     assert kwargs["timeout"] == 30
     assert kwargs["batch_size"] == consumer.DEFAULT_BATCH_SIZE

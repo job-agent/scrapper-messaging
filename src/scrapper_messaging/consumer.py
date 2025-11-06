@@ -65,11 +65,21 @@ class ScrapperConsumer:
             request_data = json.loads(body.decode("utf-8"))
             request = ScrapeJobsRequest(**request_data)
 
+            filter_payload = request.get("filter") or {}
+            min_salary = filter_payload.get("min_salary")
+            employment_location = filter_payload.get("employment_location")
+            posted_after_str = filter_payload.get("posted_after")
+
+            if min_salary is None:
+                min_salary = 4000
+            if employment_location is None:
+                employment_location = "remote"
+
             self.logger.info(
                 "Processing scrape request with parameters: "
-                f"salary={request.get('salary', 4000)}, "
-                f"employment={request.get('employment', 'remote')}, "
-                f"posted_after={request.get('posted_after', 'None')}, "
+                f"min_salary={min_salary}, "
+                f"employment_location={employment_location}, "
+                f"posted_after={posted_after_str or 'None'}, "
                 f"timeout={request.get('timeout', 30)}"
             )
 
@@ -105,9 +115,12 @@ class ScrapperConsumer:
         reply_to: Optional[str],
         correlation_id: Optional[str],
     ) -> Tuple[ScrapeJobsResponse, bool]:
+        filter_payload = request.get("filter") or {}
+
         posted_after = None
-        if request.get("posted_after"):
-            posted_after = datetime.fromisoformat(request["posted_after"])
+        posted_after_str = filter_payload.get("posted_after")
+        if posted_after_str:
+            posted_after = datetime.fromisoformat(posted_after_str)
 
         batch_size = request.get("batch_size", self.DEFAULT_BATCH_SIZE)
         total_jobs = 0
@@ -132,9 +145,16 @@ class ScrapperConsumer:
                 response["total_jobs"] = total_jobs
             self._send_response(channel, reply_to, correlation_id, response)
 
+        min_salary = filter_payload.get("min_salary")
+        employment_location = filter_payload.get("employment_location")
+        if min_salary is None:
+            min_salary = 4000
+        if employment_location is None:
+            employment_location = "remote"
+
         result = self.service.scrape_jobs(
-            salary=request.get("salary", 4000),
-            employment=request.get("employment", "remote"),
+            min_salary=min_salary,
+            employment_location=employment_location,
             posted_after=posted_after,
             timeout=request.get("timeout", 30),
             batch_size=batch_size,

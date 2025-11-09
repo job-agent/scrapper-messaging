@@ -1,13 +1,11 @@
-"""RabbitMQ consumer for processing scrape job requests."""
-
 import json
 import logging
-from datetime import datetime
 from typing import List, Optional, Tuple
 
 import pika
 from job_scrapper_contracts import (
     Job,
+    ScrapeJobsFilter,
     ScrapeJobsRequest,
     ScrapeJobsResponse,
     ScrapperServiceInterface,
@@ -18,8 +16,6 @@ from .connection import RabbitMQConnection
 
 
 class ScrapperConsumer:
-    """RabbitMQ consumer that processes scrape job requests."""
-
     QUEUE_NAME = "job.scrape.request"
     DEFAULT_BATCH_SIZE = 50
 
@@ -66,20 +62,9 @@ class ScrapperConsumer:
             request = ScrapeJobsRequest(**request_data)
 
             filter_payload = request.get("filter") or {}
-            min_salary = filter_payload.get("min_salary")
-            employment_location = filter_payload.get("employment_location")
-            posted_after_str = filter_payload.get("posted_after")
-
-            if min_salary is None:
-                min_salary = 4000
-            if employment_location is None:
-                employment_location = "remote"
 
             self.logger.info(
-                "Processing scrape request with parameters: "
-                f"min_salary={min_salary}, "
-                f"employment_location={employment_location}, "
-                f"posted_after={posted_after_str or 'None'}, "
+                f"Processing scrape request with filter={filter_payload}, "
                 f"timeout={request.get('timeout', 30)}"
             )
 
@@ -115,13 +100,7 @@ class ScrapperConsumer:
         reply_to: Optional[str],
         correlation_id: Optional[str],
     ) -> Tuple[ScrapeJobsResponse, bool]:
-        filter_payload = request.get("filter") or {}
-
-        posted_after = None
-        posted_after_str = filter_payload.get("posted_after")
-        if posted_after_str:
-            posted_after = datetime.fromisoformat(posted_after_str)
-
+        filters: ScrapeJobsFilter = request.get("filter") or {}
         batch_size = request.get("batch_size", self.DEFAULT_BATCH_SIZE)
         total_jobs = 0
         final_emitted = False
@@ -145,17 +124,8 @@ class ScrapperConsumer:
                 response["total_jobs"] = total_jobs
             self._send_response(channel, reply_to, correlation_id, response)
 
-        min_salary = filter_payload.get("min_salary")
-        employment_location = filter_payload.get("employment_location")
-        if min_salary is None:
-            min_salary = 4000
-        if employment_location is None:
-            employment_location = "remote"
-
         result = self.service.scrape_jobs(
-            min_salary=min_salary,
-            employment_location=employment_location,
-            posted_after=posted_after,
+            filters=filters,
             timeout=request.get("timeout", 30),
             batch_size=batch_size,
             on_jobs_batch=emit_jobs,

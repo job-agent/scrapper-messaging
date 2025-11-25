@@ -62,7 +62,7 @@ def test_consumer_initialization(consumer, mock_service):
 
 
 def test_process_request_basic(consumer, mock_service):
-    request = {"filter": {"min_salary": 5000, "employment_location": "full-time"}, "timeout": 30}
+    request = {"filters": {"min_salary": 5000, "employment_location": "full-time"}, "timeout": 30}
 
     channel = Mock()
     consumer._send_response = Mock()
@@ -91,7 +91,7 @@ def test_process_request_basic(consumer, mock_service):
 
 def test_process_request_with_posted_after(consumer, mock_service):
     request = {
-        "filter": {
+        "filters": {
             "min_salary": 4000,
             "employment_location": "remote",
             "posted_after": "2024-01-01T00:00:00",

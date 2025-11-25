@@ -61,10 +61,10 @@ class ScrapperConsumer:
             request_data = json.loads(body.decode("utf-8"))
             request = ScrapeJobsRequest(**request_data)
 
-            filter_payload = request.get("filter") or {}
+            filter_payload = request.get("filters") or {}
 
             self.logger.info(
-                f"Processing scrape request with filter={filter_payload}, "
+                f"Processing scrape request with filters={filter_payload}, "
                 f"timeout={request.get('timeout', 30)}"
             )
 
@@ -100,7 +100,7 @@ class ScrapperConsumer:
         reply_to: Optional[str],
         correlation_id: Optional[str],
     ) -> Tuple[ScrapeJobsResponse, bool]:
-        filters: ScrapeJobsFilter = request.get("filter") or {}
+        filters: ScrapeJobsFilter = request.get("filters") or {}
         batch_size = request.get("batch_size", self.DEFAULT_BATCH_SIZE)
         total_jobs = 0
         final_emitted = False

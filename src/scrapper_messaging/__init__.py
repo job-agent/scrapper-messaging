@@ -4,4 +4,3 @@ from .connection import RabbitMQConnection
 from .consumer import ScrapperConsumer
 
 __all__ = ["RabbitMQConnection", "ScrapperConsumer"]
-

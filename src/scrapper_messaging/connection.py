@@ -1,66 +1,74 @@
 """RabbitMQ connection management."""
 
+from __future__ import annotations
+
 import logging
 import os
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Type
 
 import pika
 from pika.adapters.blocking_connection import BlockingChannel, BlockingConnection
+from pika.connection import Parameters
+
+from .rabbitmq_connection_interface import IRabbitMQConnection
 
 
-class RabbitMQConnection:
-    """Manages RabbitMQ connection and channel lifecycle.
+class RabbitMQConnection(IRabbitMQConnection):
+    """Manages lifecycle of a blocking RabbitMQ connection."""
 
-    Attributes:
-        rabbitmq_url: AMQP connection URL
-        connection: Pika blocking connection
-        channel: Pika blocking channel
-    """
+    def __init__(self, rabbitmq_url: Optional[str] = None) -> None:
+        url = (rabbitmq_url or os.getenv("RABBITMQ_URL") or "").strip()
+        if not url:
+            raise ValueError(
+                "RabbitMQ URL must be provided via argument or RABBITMQ_URL environment variable."
+            )
 
-    def __init__(self, rabbitmq_url: Optional[str] = None):
-        """Initialize RabbitMQ connection.
+        try:
+            self._parameters: Parameters = pika.URLParameters(url)
+        except ValueError as exc:
+            raise ValueError(f"Invalid RabbitMQ URL provided: {url}") from exc
 
-        Args:
-            rabbitmq_url: AMQP connection URL. If None, reads from RABBITMQ_URL env var
-        """
-        self.rabbitmq_url = rabbitmq_url or os.getenv("RABBITMQ_URL")
+        self.rabbitmq_url = url
         self.connection: Optional[BlockingConnection] = None
         self.channel: Optional[BlockingChannel] = None
         self.logger = logging.getLogger(__name__)
 
     def connect(self) -> BlockingChannel:
-        """Establish connection and create channel.
-
-        Returns:
-            BlockingChannel: Pika channel for message operations
-
-        Raises:
-            pika.exceptions.AMQPConnectionError: If connection fails
-        """
         if self.connection is None or self.connection.is_closed:
-            self.logger.info(f"Connecting to RabbitMQ at {self.rabbitmq_url}")
-            parameters = pika.URLParameters(self.rabbitmq_url)
-            self.connection = pika.BlockingConnection(parameters)
+            self.logger.info("Connecting to RabbitMQ at %s", self.rabbitmq_url)
+            try:
+                self.connection = pika.BlockingConnection(self._parameters)
+            except pika.exceptions.AMQPConnectionError as exc:
+                self.logger.error("Failed to establish RabbitMQ connection: %s", exc)
+                raise
+
             self.channel = self.connection.channel()
-            self.logger.info("Connected to RabbitMQ")
+            self.logger.info("Connected to RabbitMQ.")
+
+        if self.channel is None or self.channel.is_closed:
+            self.logger.debug("Re-opening channel for RabbitMQ connection.")
+            self.channel = self.connection.channel()
 
         return self.channel
 
     def close(self) -> None:
-        """Close channel and connection gracefully."""
         if self.channel and not self.channel.is_closed:
             self.channel.close()
-            self.logger.info("Closed RabbitMQ channel")
+            self.logger.info("Closed RabbitMQ channel.")
 
         if self.connection and not self.connection.is_closed:
             self.connection.close()
-            self.logger.info("Closed RabbitMQ connection")
+            self.logger.info("Closed RabbitMQ connection.")
 
-    def __enter__(self):
-        """Context manager entry."""
+    def __enter__(self) -> RabbitMQConnection:
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         self.close()

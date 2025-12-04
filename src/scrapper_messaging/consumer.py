@@ -1,47 +1,88 @@
-import json
 import logging
 from typing import List, Optional, Tuple
 
 import pika
 from job_scrapper_contracts import (
     Job,
-    ScrapeJobsFilter,
     ScrapeJobsRequest,
     ScrapeJobsResponse,
     ScrapperServiceInterface,
 )
 from pika.channel import Channel
 
-from .connection import RabbitMQConnection
+from .jobs_service_invoker_interface import IJobsServiceInvoker
+from .queue_config import QueueConfig
+from .rabbitmq_connection_interface import IRabbitMQConnection
+from .response_publisher_interface import IResponsePublisher
+from .scrape_request_decoder_interface import IScrapeRequestDecoder
+from .scrapper_consumer_config import DEFAULT_QUEUE_NAME, ScrapperConsumerDependencies
 
 
 class ScrapperConsumer:
-    QUEUE_NAME = "job.scrape.request"
+    """Consumes scrape requests and delegates processing to the scrapper service."""
+
+    QUEUE_NAME = DEFAULT_QUEUE_NAME
     DEFAULT_BATCH_SIZE = 50
 
     def __init__(
         self,
+        *,
+        connection: IRabbitMQConnection,
+        queue_config: QueueConfig,
+        request_decoder: IScrapeRequestDecoder,
+        response_publisher: IResponsePublisher,
+        service_invoker: IJobsServiceInvoker,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        self.logger = logger or logging.getLogger(__name__)
+        self.queue_config = queue_config
+        self.request_decoder = request_decoder
+        self.response_publisher = response_publisher
+        self.service_invoker = service_invoker
+        self.connection = connection
+
+    @classmethod
+    def from_url(
+        cls,
         service: ScrapperServiceInterface,
         rabbitmq_url: Optional[str] = None,
-    ):
-        self.service = service
-        self.rabbitmq_connection = RabbitMQConnection(rabbitmq_url)
-        self.logger = logging.getLogger(__name__)
+        *,
+        dependencies: Optional[ScrapperConsumerDependencies] = None,
+    ) -> "ScrapperConsumer":
+        deps = dependencies or ScrapperConsumerDependencies()
+
+        return cls(
+            connection=deps.make_connection(rabbitmq_url),
+            queue_config=deps.queue_config,
+            request_decoder=deps.make_request_decoder(),
+            response_publisher=deps.make_response_publisher(),
+            service_invoker=deps.make_service_invoker(service),
+        )
 
     def start(self) -> None:
-        channel = self.rabbitmq_connection.connect()
-        channel.queue_declare(queue=self.QUEUE_NAME, durable=True)
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue=self.QUEUE_NAME, on_message_callback=self._on_message)
+        channel = self.connection.connect()
+        channel.queue_declare(queue=self.queue_config.queue_name, durable=self.queue_config.durable)
+        if self.queue_config.exchange:
+            routing_key = self.queue_config.routing_key or self.queue_config.queue_name
+            channel.queue_bind(
+                queue=self.queue_config.queue_name,
+                exchange=self.queue_config.exchange,
+                routing_key=routing_key,
+            )
+        channel.basic_qos(prefetch_count=self.queue_config.prefetch_count)
+        channel.basic_consume(
+            queue=self.queue_config.queue_name,
+            on_message_callback=self._on_message,
+        )
 
-        self.logger.info(f"Started consuming from {self.QUEUE_NAME}")
+        self.logger.info("Started consuming from %s", self.queue_config.queue_name)
         try:
             channel.start_consuming()
         except KeyboardInterrupt:
             self.logger.info("Stopping consumer...")
             channel.stop_consuming()
         finally:
-            self.rabbitmq_connection.close()
+            self.connection.close()
 
     def _on_message(
         self,
@@ -54,32 +95,33 @@ class ScrapperConsumer:
         reply_to = properties.reply_to
 
         self.logger.info(
-            f"Received message with correlation_id={correlation_id}, reply_to={reply_to}"
+            "Received message with correlation_id=%s, reply_to=%s",
+            correlation_id,
+            reply_to,
         )
 
         try:
-            request_data = json.loads(body.decode("utf-8"))
-            request = ScrapeJobsRequest(**request_data)
-
-            filter_payload = request.get("filters") or {}
-
+            request = self.request_decoder.decode(body)
             self.logger.info(
-                f"Processing scrape request with filters={filter_payload}, "
-                f"timeout={request.get('timeout', 30)}"
+                "Processing scrape request with timeout=%s",
+                request.get("timeout", 30),
             )
 
             response, final_emitted = self._process_request(
-                request, channel, reply_to, correlation_id
+                request,
+                channel,
+                reply_to,
+                correlation_id,
             )
 
             if reply_to and not final_emitted:
-                self._send_response(channel, reply_to, correlation_id, response)
+                self._publish_response(channel, reply_to, correlation_id, response)
 
             channel.basic_ack(delivery_tag=method.delivery_tag)
-            self.logger.info(f"Successfully processed message {correlation_id}")
+            self.logger.info("Successfully processed message %s", correlation_id)
 
         except Exception as exc:
-            self.logger.error(f"Error processing message: {exc}", exc_info=True)
+            self.logger.error("Error processing message: %s", exc, exc_info=True)
 
             error_response: ScrapeJobsResponse = {
                 "jobs": [],
@@ -89,7 +131,7 @@ class ScrapperConsumer:
             }
 
             if reply_to:
-                self._send_response(channel, reply_to, correlation_id, error_response)
+                self._publish_response(channel, reply_to, correlation_id, error_response)
 
             channel.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -100,7 +142,6 @@ class ScrapperConsumer:
         reply_to: Optional[str],
         correlation_id: Optional[str],
     ) -> Tuple[ScrapeJobsResponse, bool]:
-        filters: ScrapeJobsFilter = request.get("filters") or {}
         batch_size = request.get("batch_size", self.DEFAULT_BATCH_SIZE)
         total_jobs = 0
         final_emitted = False
@@ -122,11 +163,10 @@ class ScrapperConsumer:
             }
             if final:
                 response["total_jobs"] = total_jobs
-            self._send_response(channel, reply_to, correlation_id, response)
+            self._publish_response(channel, reply_to, correlation_id, response)
 
-        result = self.service.scrape_jobs(
-            filters=filters,
-            timeout=request.get("timeout", 30),
+        result = self.service_invoker.invoke(
+            request=request,
             batch_size=batch_size,
             on_jobs_batch=emit_jobs,
         )
@@ -134,7 +174,7 @@ class ScrapperConsumer:
         if isinstance(result, list):
             total_jobs = max(total_jobs, len(result))
 
-        self.logger.info(f"Scraping completed: total {total_jobs} jobs scraped")
+        self.logger.info("Scraping completed: total %s jobs scraped", total_jobs)
 
         response: ScrapeJobsResponse = {
             "jobs": [],
@@ -147,21 +187,16 @@ class ScrapperConsumer:
 
         return response, final_emitted
 
-    def _send_response(
+    def _publish_response(
         self,
         channel: Channel,
         reply_to: str,
         correlation_id: Optional[str],
         response: ScrapeJobsResponse,
     ) -> None:
-        channel.basic_publish(
-            exchange="",
-            routing_key=reply_to,
-            properties=pika.BasicProperties(
-                correlation_id=correlation_id,
-                content_type="application/json",
-            ),
-            body=json.dumps(response).encode("utf-8"),
+        self.response_publisher.publish(
+            channel=channel,
+            reply_to=reply_to,
+            correlation_id=correlation_id,
+            response=response,
         )
-
-        self.logger.info(f"Sent response to {reply_to} with correlation_id={correlation_id}")

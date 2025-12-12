@@ -7,15 +7,18 @@ from typing import Callable, Optional
 
 from job_scrapper_contracts import ScrapperServiceInterface
 
-from .connection import RabbitMQConnection
-from .jobs_service_invoker_interface import IJobsServiceInvoker
-from .json_scrape_request_decoder import JSONScrapeRequestDecoder
+from scrapper_messaging.connection import RabbitMQConnection
+from scrapper_messaging.contracts import (
+    IJobsServiceInvoker,
+    IRabbitMQConnection,
+    IResponsePublisher,
+    IScrapeRequestDecoder,
+)
+from scrapper_messaging.request_decoder import JSONScrapeRequestDecoder
+from scrapper_messaging.response_publisher import RabbitMQResponsePublisher
+from scrapper_messaging.service_invoker import ScrapperServiceInvoker
+
 from .queue_config import QueueConfig
-from .rabbitmq_connection_interface import IRabbitMQConnection
-from .rabbitmq_response_publisher import RabbitMQResponsePublisher
-from .response_publisher_interface import IResponsePublisher
-from .scrape_request_decoder_interface import IScrapeRequestDecoder
-from .scrapper_service_invoker import ScrapperServiceInvoker
 
 DEFAULT_QUEUE_NAME = "job.scrape.request"
 

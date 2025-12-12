@@ -11,7 +11,7 @@ from scrapper_messaging.connection import RabbitMQConnection
 
 @pytest.fixture
 def mock_pika():
-    with patch("scrapper_messaging.connection.pika") as mock_pika_module:
+    with patch("scrapper_messaging.connection.rabbitmq_connection.pika") as mock_pika_module:
         mock_parameters = Mock()
         mock_pika_module.URLParameters.return_value = mock_parameters
         mock_pika_module.exceptions = pika.exceptions
@@ -33,7 +33,10 @@ def test_init_uses_env_var(mock_pika):
 
 
 def test_init_invalid_url():
-    with patch("scrapper_messaging.connection.pika.URLParameters", side_effect=ValueError):
+    with patch(
+        "scrapper_messaging.connection.rabbitmq_connection.pika.URLParameters",
+        side_effect=ValueError,
+    ):
         with pytest.raises(ValueError):
             RabbitMQConnection("invalid-url")
 

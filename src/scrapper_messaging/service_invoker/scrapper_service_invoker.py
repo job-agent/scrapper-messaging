@@ -6,7 +6,7 @@ from typing import Callable, List, Optional
 
 from job_scrapper_contracts import Job, ScrapeJobsRequest, ScrapperServiceInterface
 
-from .jobs_service_invoker_interface import IJobsServiceInvoker
+from scrapper_messaging.contracts import IJobsServiceInvoker
 
 
 class ScrapperServiceInvoker(IJobsServiceInvoker):

@@ -10,7 +10,7 @@ import pika
 from job_scrapper_contracts import ScrapeJobsResponse
 from pika.channel import Channel
 
-from .response_publisher_interface import IResponsePublisher
+from scrapper_messaging.contracts import IResponsePublisher
 
 
 class RabbitMQResponsePublisher(IResponsePublisher):

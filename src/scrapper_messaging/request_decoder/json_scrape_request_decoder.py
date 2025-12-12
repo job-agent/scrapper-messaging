@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from job_scrapper_contracts import ScrapeJobsRequest
 
-from .scrape_request_decoder_interface import IScrapeRequestDecoder
+from scrapper_messaging.contracts import IScrapeRequestDecoder
 
 
 class JSONScrapeRequestDecoder(IScrapeRequestDecoder):

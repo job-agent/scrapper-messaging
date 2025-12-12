@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-from scrapper_messaging.scrapper_service_invoker import ScrapperServiceInvoker
+from scrapper_messaging.service_invoker import ScrapperServiceInvoker
 
 
 def test_scrapper_service_invoker_passes_arguments():

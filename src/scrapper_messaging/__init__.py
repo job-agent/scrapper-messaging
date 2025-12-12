@@ -1,10 +1,13 @@
 """Messaging package providing RabbitMQ connectivity and consumers."""
 
 from .connection import RabbitMQConnection
-from .consumer import ScrapperConsumer
-from .queue_config import QueueConfig
-from .rabbitmq_connection_interface import IRabbitMQConnection
-from .scrapper_consumer_config import DEFAULT_QUEUE_NAME, ScrapperConsumerDependencies
+from .consumer import (
+    DEFAULT_QUEUE_NAME,
+    QueueConfig,
+    ScrapperConsumer,
+    ScrapperConsumerDependencies,
+)
+from .contracts import IRabbitMQConnection
 
 __all__ = [
     "RabbitMQConnection",

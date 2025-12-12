@@ -11,7 +11,7 @@ import pika
 from pika.adapters.blocking_connection import BlockingChannel, BlockingConnection
 from pika.connection import Parameters
 
-from .rabbitmq_connection_interface import IRabbitMQConnection
+from scrapper_messaging.contracts import IRabbitMQConnection
 
 
 class RabbitMQConnection(IRabbitMQConnection):

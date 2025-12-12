@@ -6,15 +6,15 @@ from unittest.mock import Mock
 import pika
 import pytest
 
-from scrapper_messaging.consumer import ScrapperConsumer
-from scrapper_messaging.jobs_service_invoker_interface import IJobsServiceInvoker
-from scrapper_messaging.json_scrape_request_decoder import JSONScrapeRequestDecoder
-from scrapper_messaging.queue_config import QueueConfig
-from scrapper_messaging.rabbitmq_connection_interface import IRabbitMQConnection
-from scrapper_messaging.response_publisher_interface import IResponsePublisher
-from scrapper_messaging.scrape_request_decoder_interface import IScrapeRequestDecoder
-from scrapper_messaging.scrapper_consumer_config import ScrapperConsumerDependencies
-from scrapper_messaging.scrapper_service_invoker import ScrapperServiceInvoker
+from scrapper_messaging.consumer import QueueConfig, ScrapperConsumer, ScrapperConsumerDependencies
+from scrapper_messaging.contracts import (
+    IJobsServiceInvoker,
+    IRabbitMQConnection,
+    IResponsePublisher,
+    IScrapeRequestDecoder,
+)
+from scrapper_messaging.request_decoder import JSONScrapeRequestDecoder
+from scrapper_messaging.service_invoker import ScrapperServiceInvoker
 
 
 class DummyJob:
@@ -262,7 +262,9 @@ def test_from_url_uses_default_dependencies(mock_connection):
 
     service = Mock()
 
-    with patch("scrapper_messaging.scrapper_consumer_config.RabbitMQConnection") as mock_conn_class:
+    with patch(
+        "scrapper_messaging.consumer.scrapper_consumer_config.RabbitMQConnection"
+    ) as mock_conn_class:
         mock_conn_class.return_value = mock_connection
         consumer = ScrapperConsumer.from_url(
             service=service,

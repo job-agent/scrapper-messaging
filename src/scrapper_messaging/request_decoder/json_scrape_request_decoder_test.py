@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from scrapper_messaging.json_scrape_request_decoder import JSONScrapeRequestDecoder
+from scrapper_messaging.request_decoder import JSONScrapeRequestDecoder
 
 
 def test_json_decoder_parses_valid_payload():
@@ -29,7 +29,7 @@ def test_json_decoder_raises_on_invalid_schema():
     decoder = JSONScrapeRequestDecoder()
 
     with patch(
-        "scrapper_messaging.json_scrape_request_decoder.ScrapeJobsRequest"
+        "scrapper_messaging.request_decoder.json_scrape_request_decoder.ScrapeJobsRequest"
     ) as mock_request_class:
         mock_request_class.side_effect = TypeError("unexpected keyword argument")
 

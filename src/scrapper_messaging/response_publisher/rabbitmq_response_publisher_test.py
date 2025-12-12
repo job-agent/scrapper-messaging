@@ -3,7 +3,7 @@
 import json
 from unittest.mock import Mock
 
-from scrapper_messaging.rabbitmq_response_publisher import RabbitMQResponsePublisher
+from scrapper_messaging.response_publisher import RabbitMQResponsePublisher
 
 
 def test_response_publisher_sends_message():

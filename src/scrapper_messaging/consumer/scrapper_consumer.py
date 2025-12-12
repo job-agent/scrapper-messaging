@@ -10,11 +10,14 @@ from job_scrapper_contracts import (
 )
 from pika.channel import Channel
 
-from .jobs_service_invoker_interface import IJobsServiceInvoker
+from scrapper_messaging.contracts import (
+    IJobsServiceInvoker,
+    IRabbitMQConnection,
+    IResponsePublisher,
+    IScrapeRequestDecoder,
+)
+
 from .queue_config import QueueConfig
-from .rabbitmq_connection_interface import IRabbitMQConnection
-from .response_publisher_interface import IResponsePublisher
-from .scrape_request_decoder_interface import IScrapeRequestDecoder
 from .scrapper_consumer_config import DEFAULT_QUEUE_NAME, ScrapperConsumerDependencies
 
 

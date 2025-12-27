@@ -42,7 +42,7 @@ def mock_publisher():
 def mock_service():
     service = Mock()
 
-    def fake_scrape_jobs(*, filters, timeout, batch_size, on_jobs_batch):
+    def fake_scrape_jobs(*, salary, employment, posted_after, timeout, batch_size, on_jobs_batch):
         job_data = {
             "job_id": 12345,
             "title": "Python Developer",
@@ -123,7 +123,7 @@ def test_start_uses_queue_config(mock_connection):
 
 def test_process_request_basic(consumer, mock_publisher):
     channel = Mock()
-    request = {"filters": {"min_salary": 5000}, "timeout": 30}
+    request = {"salary": 5000, "employment": "remote", "timeout": 30}
 
     response, final_emitted = consumer._process_request(request, channel, "reply.queue", "cid")
 
@@ -141,7 +141,7 @@ def test_on_message_success_flow(consumer, mock_connection, mock_publisher):
     properties.correlation_id = "cid"
     properties.reply_to = "reply.queue"
 
-    body = json.dumps({"filters": {"location": "remote"}}).encode("utf-8")
+    body = json.dumps({"employment": "remote"}).encode("utf-8")
 
     consumer._on_message(channel, method, properties, body)
 
@@ -177,7 +177,7 @@ def test_on_message_missing_reply_to(consumer, mock_connection, mock_publisher):
     properties.correlation_id = "cid"
     properties.reply_to = None
 
-    body = json.dumps({"filters": {}}).encode("utf-8")
+    body = json.dumps({}).encode("utf-8")
 
     consumer._on_message(channel, method, properties, body)
 

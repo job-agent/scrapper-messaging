@@ -18,14 +18,18 @@ dev = [
     "pytest-mock>=3.14.1",
     "ruff>=0.14.10",
     "pre-commit>=4.0.1",
+    "mypy>=1.11.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["src"]
+testpaths = ["src", "smoke_tests"]
 pythonpath = ["src"]
+markers = [
+    "smoke: marks tests as smoke tests (quick validation of package health)",
+]
 
 [tool.ruff]
 line-length = 100

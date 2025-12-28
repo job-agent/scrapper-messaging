@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from job_scrapper_contracts import ScrapeJobsRequest
 
@@ -19,7 +19,4 @@ class JSONScrapeRequestDecoder(IScrapeRequestDecoder):
         except json.JSONDecodeError as exc:
             raise ValueError("Failed to decode request payload as JSON.") from exc
 
-        try:
-            return ScrapeJobsRequest(**raw_request)
-        except TypeError as exc:
-            raise ValueError("Request payload does not match ScrapeJobsRequest schema.") from exc
+        return cast(ScrapeJobsRequest, raw_request)

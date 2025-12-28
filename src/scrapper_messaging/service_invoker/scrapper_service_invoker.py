@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Callable, List, Optional
 
 from job_scrapper_contracts import Job, ScrapeJobsRequest, ScrapperServiceInterface
+from job_scrapper_contracts.scrape_filter import ScrapeJobsFilter
 
 from scrapper_messaging.contracts import IJobsServiceInvoker
 
@@ -22,8 +23,9 @@ class ScrapperServiceInvoker(IJobsServiceInvoker):
         batch_size: int,
         on_jobs_batch: Callable[[List[Job], bool], None],
     ) -> Optional[List[Job]]:
-        filters = request.get("filters") or {}
         timeout = request.get("timeout", 30)
+        filters: ScrapeJobsFilter = request.get("filters", {})
+
         return self._service.scrape_jobs(
             filters=filters,
             timeout=timeout,

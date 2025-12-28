@@ -3,5 +3,5 @@
 # Run ruff check with auto-fix
 ruff check . --fix
 
-# Run black formatter
-black .
+# Run ruff formatter
+ruff format .

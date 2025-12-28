@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Callable, List, Optional
 
 from job_scrapper_contracts import Job, ScrapeJobsRequest, ScrapperServiceInterface
+from job_scrapper_contracts.scrape_filter import ScrapeJobsFilter
 
 from scrapper_messaging.contracts import IJobsServiceInvoker
 
@@ -24,17 +24,10 @@ class ScrapperServiceInvoker(IJobsServiceInvoker):
         on_jobs_batch: Callable[[List[Job], bool], None],
     ) -> Optional[List[Job]]:
         timeout = request.get("timeout", 30)
-        salary = request.get("salary", 0)
-        employment = request.get("employment", "")
-        posted_after_str = request.get("posted_after")
-        posted_after: Optional[datetime] = None
-        if posted_after_str:
-            posted_after = datetime.fromisoformat(posted_after_str)
+        filters: ScrapeJobsFilter = request.get("filters", {})
 
         return self._service.scrape_jobs(
-            salary=salary,
-            employment=employment,
-            posted_after=posted_after,
+            filters=filters,
             timeout=timeout,
             batch_size=batch_size,
             on_jobs_batch=on_jobs_batch,

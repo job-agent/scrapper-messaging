@@ -42,7 +42,7 @@ def mock_publisher():
 def mock_service():
     service = Mock()
 
-    def fake_scrape_jobs(*, salary, employment, posted_after, timeout, batch_size, on_jobs_batch):
+    def fake_scrape_jobs(*, filters, timeout, batch_size, on_jobs_batch):
         job_data = {
             "job_id": 12345,
             "title": "Python Developer",
@@ -123,7 +123,8 @@ def test_start_uses_queue_config(mock_connection):
 
 def test_process_request_basic(consumer, mock_publisher):
     channel = Mock()
-    request = {"salary": 5000, "employment": "remote", "timeout": 30}
+    filters = {"min_salary": 5000, "employment_location": "remote"}
+    request = {"filters": filters, "timeout": 30}
 
     response, final_emitted = consumer._process_request(request, channel, "reply.queue", "cid")
 

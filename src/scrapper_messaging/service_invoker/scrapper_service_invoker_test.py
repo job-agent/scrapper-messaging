@@ -8,15 +8,14 @@ from scrapper_messaging.service_invoker import ScrapperServiceInvoker
 def test_scrapper_service_invoker_passes_arguments():
     service = Mock()
     invoker = ScrapperServiceInvoker(service)
-    request = {"salary": 6000, "employment": "remote"}
+    filters = {"min_salary": 6000, "employment_location": "remote"}
+    request = {"filters": filters}
     handler = Mock()
 
     invoker.invoke(request=request, batch_size=25, on_jobs_batch=handler)
 
     service.scrape_jobs.assert_called_once_with(
-        salary=6000,
-        employment="remote",
-        posted_after=None,
+        filters=filters,
         timeout=30,
         batch_size=25,
         on_jobs_batch=handler,
@@ -32,9 +31,7 @@ def test_invoke_with_custom_timeout():
     invoker.invoke(request=request, batch_size=10, on_jobs_batch=handler)
 
     service.scrape_jobs.assert_called_once_with(
-        salary=0,
-        employment="",
-        posted_after=None,
+        filters={},
         timeout=60,
         batch_size=10,
         on_jobs_batch=handler,
@@ -50,9 +47,7 @@ def test_invoke_with_defaults():
     invoker.invoke(request=request, batch_size=50, on_jobs_batch=handler)
 
     service.scrape_jobs.assert_called_once_with(
-        salary=0,
-        employment="",
-        posted_after=None,
+        filters={},
         timeout=30,
         batch_size=50,
         on_jobs_batch=handler,
@@ -62,15 +57,14 @@ def test_invoke_with_defaults():
 def test_invoke_with_posted_after():
     service = Mock()
     invoker = ScrapperServiceInvoker(service)
-    request = {"posted_after": "2024-01-15T10:30:00"}
+    filters = {"posted_after": "2024-01-15T10:30:00"}
+    request = {"filters": filters}
     handler = Mock()
 
     invoker.invoke(request=request, batch_size=50, on_jobs_batch=handler)
 
     call_kwargs = service.scrape_jobs.call_args.kwargs
-    assert call_kwargs["posted_after"].year == 2024
-    assert call_kwargs["posted_after"].month == 1
-    assert call_kwargs["posted_after"].day == 15
+    assert call_kwargs["filters"]["posted_after"] == "2024-01-15T10:30:00"
 
 
 def test_invoke_returns_service_result():
